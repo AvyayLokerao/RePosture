@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Posture Correction Monitor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+      color: #E0E0E0;
+    }
+    .container {
+      text-align: center;
+      background-color: #111111;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.5);
+      width: 100%;
+      max-width: 500px;
+      border: 2px solid #66B2FF;
+    }
+    h1 {
+      color: #66B2FF;
+      font-size: 2em;
+      margin-bottom: 10px;
+    }
+    #status {
+      font-size: 1.5em;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+    .good {
+      color: #28A745;
+    }
+    .bad {
+      color: #DC3545;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 1em;
+      color: #FFFFFF;
+      background-color: #007BFF;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    button:disabled {
+      background-color: #555555;
+      cursor: not-allowed;
+    }
+    .instructions {
+      margin-top: 30px;
+      text-align: left;
+      background-color: #222222;
+      padding: 20px;
+      border-radius: 10px;
+      color: #E0E0E0;
+      border: 1px solid #66B2FF;
+    }
+    .instructions h2 {
+      color: #66B2FF;
+      font-size: 1.2em;
+      margin-bottom: 10px;
+    }
+    .instructions p {
+      font-size: 0.9em;
+      line-height: 1.5;
+    }
+    .threshold-input {
+      margin-top: 15px;
+      text-align: center;
+    }
+    .threshold-input label {
+      font-size: 1em;
+      color: #E0E0E0;
+    }
+    .threshold-input input {
+      margin-left: 10px;
+      padding: 5px;
+      width: 50px;
+      font-size: 1em;
+      border: 1px solid #66B2FF;
+      border-radius: 4px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Posture Correction Monitor</h1>
+    <p id="angle">Angle: -</p>
+    <p id="status" class="bad">Status: Not Connected</p>
+    <button id="connectButton">Connect to Device</button>
+   
+    <!-- Threshold Angle Configuration -->
+    <div class="threshold-input">
+      <label for="angleThreshold">Set Angle Threshold (°):</label>
+      <input type="number" id="angleThreshold" value="15" min="5" max="90">
+    </div>
+
+
+    <!-- Instructional Section -->
+    <div class="instructions">
+      <h2>How to Wear & Use</h2>
+      <p>1. Attach the posture correction device on your upper back, centered between your shoulder blades for optimal results.</p>
+      <p>2. Ensure the device is firmly secured and connected to the monitor by clicking the "Connect to Device" button above.</p>
+      <p>3. Sit or stand in a straight, relaxed position. If the angle reading exceeds your set threshold, adjust your posture until it reads "Good Posture."</p>
+      <p>4. If poor posture persists, the device will vibrate as a gentle reminder to correct your posture.</p>
+    </div>
+  </div>
+
+
+  <script>
+    let thresholdAngle = parseInt(document.getElementById("angleThreshold").value, 10);
+    let device;
+    let characteristic;
+
+
+    // Update threshold angle dynamically
+    document.getElementById("angleThreshold").addEventListener("input", (event) => {
+      thresholdAngle = parseInt(event.target.value, 10);
+    });
+
+
+    async function connectToDevice() {
+      try {
+        // Request Bluetooth device and show all available devices
+        device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['battery_service'] // Replace with your service UUID if available
+        });
+
+
+        if (!device) {
+          alert("No device selected. Please try again.");
+          return;
+        }
+
+
+        const server = await device.gatt.connect();
+        const services = await server.getPrimaryServices();
+
+
+        if (services.length === 0) {
+          alert("No services found on the device.");
+          return;
+        }
+
+
+        // Use the first service and characteristic for simplicity
+        const service = services[0];
+        const characteristics = await service.getCharacteristics();
+
+
+        if (characteristics.length === 0) {
+          alert("No characteristics found.");
+          return;
+        }
+
+
+        characteristic = characteristics[0];
+        document.getElementById("connectButton").disabled = true;
+
+
+        const deviceName = device.name || "Unknown Device";
+        document.getElementById("status").textContent = `Status: Connected to ${deviceName}`;
+        document.getElementById("status").className = "good";
+
+
+        characteristic.startNotifications();
+        characteristic.addEventListener("characteristicvaluechanged", handleData);
+
+
+      } catch (error) {
+        console.error("Error connecting to Bluetooth device:", error);
+        alert("Failed to connect to a device. Please make sure your browser supports Bluetooth and try again.");
+      }
+    }
+
+
+    function handleData(event) {
+      const value = new TextDecoder().decode(event.target.value);
+      const angle = parseFloat(value.trim());
+      updateDisplay(angle);
+    }
+
+
+    function updateDisplay(angle) {
+      document.getElementById("angle").textContent = `Angle: ${angle.toFixed(2)}°`;
+
+
+      if (Math.abs(angle) > thresholdAngle) {
+        document.getElementById("status").textContent = "Status: Bad Posture!";
+        document.getElementById("status").className = "bad";
+        if (navigator.vibrate) {
+          navigator.vibrate(200);
+        }
+      } else {
+        document.getElementById("status").textContent = "Status: Good Posture";
+        document.getElementById("status").className = "good";
+      }
+    }
+
+
+    document.getElementById("connectButton").addEventListener("click", connectToDevice);
+  </script>
+</body>
+</html>
